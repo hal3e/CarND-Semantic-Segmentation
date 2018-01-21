@@ -10,6 +10,7 @@ import tensorflow as tf
 from glob import glob
 from urllib.request import urlretrieve
 from tqdm import tqdm
+from PIL import ImageFilter
 
 
 class DLProgress(tqdm):
@@ -71,6 +72,9 @@ def gen_batch_function(data_folder, image_shape):
         :param batch_size: Batch Size
         :return: Batches of training data
         """
+        # Devide batch_size by 2 because we will flip the images
+        batch_size = int(batch_size / 2)
+
         image_paths = glob(os.path.join(data_folder, 'image_2', '*.png'))
         label_paths = {
             re.sub(r'_(lane|road)_', '_', os.path.basename(path)): path
@@ -92,7 +96,10 @@ def gen_batch_function(data_folder, image_shape):
                 gt_image = np.concatenate((gt_bg, np.invert(gt_bg)), axis=2)
 
                 images.append(image)
+                images.append(np.fliplr(image))
+
                 gt_images.append(gt_image)
+                gt_images.append(np.fliplr(gt_image))
 
             yield np.array(images), np.array(gt_images)
     return get_batches_fn
@@ -119,8 +126,10 @@ def gen_test_output(sess, logits, keep_prob, image_pl, data_folder, image_shape)
         segmentation = (im_softmax > 0.5).reshape(image_shape[0], image_shape[1], 1)
         mask = np.dot(segmentation, np.array([[0, 255, 0, 127]]))
         mask = scipy.misc.toimage(mask, mode="RGBA")
+        # mask = mask.filter(ImageFilter.BLUR)
         street_im = scipy.misc.toimage(image)
         street_im.paste(mask, box=None, mask=mask)
+        street_im = scipy.misc.imresize(street_im, (375, 1242))
 
         yield os.path.basename(image_file), np.array(street_im)
 
