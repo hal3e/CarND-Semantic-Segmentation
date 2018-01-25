@@ -52,19 +52,28 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
     :return: The Tensor for the last layer of output
     """
     # 1x1 convolution
-    vgg_1x1 = tf.layers.conv2d(vgg_layer7_out, num_classes, 1, padding="SAME")
+    vgg_7_decoder = tf.layers.conv2d(vgg_layer4_out, 1024, 4, 2, padding="SAME",
+     kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3), kernel_initializer=tf.contrib.layers.xavier_initializer())
 
-    vgg_decoder_4 = tf.layers.conv2d_transpose(vgg_1x1, num_classes, 4, 2, padding='SAME', kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3))
+    vgg_1x1 = tf.layers.conv2d(vgg_7_decoder, num_classes, 1, 1, padding="SAME",
+     kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3), kernel_initializer=tf.contrib.layers.xavier_initializer())
+
+    vgg_decoder_4 = tf.layers.conv2d_transpose(vgg_1x1, num_classes, 4, 2, padding='SAME',
+     kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3), kernel_initializer=tf.contrib.layers.xavier_initializer())
     # Use 1x1 convolutions to get the same size in order to combine the layers
-    vgg_layer4_out_scaled = tf.layers.conv2d(vgg_layer4_out, num_classes, 1, padding="SAME", kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3))
+    vgg_layer4_out_scaled = tf.layers.conv2d(vgg_layer4_out, num_classes, 1, padding="SAME",
+     kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3), kernel_initializer=tf.contrib.layers.xavier_initializer())
     vgg_decoder_4 = tf.add(vgg_decoder_4, vgg_layer4_out_scaled)
 
-    vgg_decoder_3 = tf.layers.conv2d_transpose(vgg_decoder_4, num_classes, 4, 2, padding='SAME', kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3))
+    vgg_decoder_3 = tf.layers.conv2d_transpose(vgg_decoder_4, num_classes, 4, 2, padding='SAME',
+     kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3), kernel_initializer=tf.contrib.layers.xavier_initializer())
     # Use 1x1 convolutions to get the same size in order to combine the layers
-    vgg_layer3_out_scaled = tf.layers.conv2d(vgg_layer3_out, num_classes, 1, padding="SAME", kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3))
+    vgg_layer3_out_scaled = tf.layers.conv2d(vgg_layer3_out, num_classes, 1, padding="SAME",
+     kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3), kernel_initializer=tf.contrib.layers.xavier_initializer())
     vgg_decoder_3 = tf.add(vgg_decoder_3, vgg_layer3_out_scaled)
 
-    vgg_decoder_out = tf.layers.conv2d_transpose(vgg_decoder_3, num_classes, 16, 8, padding='SAME', kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3))
+    vgg_decoder_out = tf.layers.conv2d_transpose(vgg_decoder_3, num_classes, 16, 8, padding='SAME',
+     kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3), kernel_initializer=tf.contrib.layers.xavier_initializer())
 
     return vgg_decoder_out
 tests.test_layers(layers)
@@ -82,7 +91,9 @@ def optimize(nn_last_layer, correct_label, learning_rate, num_classes):
     logits = tf.reshape(nn_last_layer, (-1, num_classes))
     correct_label = tf.reshape(correct_label, (-1, num_classes))
     cross_entropy_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=correct_label))
-    optimizer = tf.train.AdamOptimizer(learning_rate).minimize(cross_entropy_loss)
+    reg_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
+    loss = cross_entropy_loss + sum(reg_losses)
+    optimizer = tf.train.AdamOptimizer(learning_rate).minimize(loss)
 
     return logits, optimizer, cross_entropy_loss
 tests.test_optimize(optimize)
@@ -107,7 +118,7 @@ def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_l
         mean_loss = 0
         counter = 0
         for images, gt_images in get_batches_fn(batch_size):
-            loss, _ = sess.run([cross_entropy_loss, train_op], feed_dict={input_image: images, keep_prob: 0.75, learning_rate: 0.0003, correct_label: gt_images})
+            loss, _ = sess.run([cross_entropy_loss, train_op], feed_dict={input_image: images, keep_prob: 0.75, learning_rate: 0.00005, correct_label: gt_images})
 
             mean_loss += loss
             counter += 1
@@ -123,8 +134,8 @@ def run():
     data_dir = './data'
     runs_dir = './runs'
     # tests.test_for_kitti_dataset(data_dir)
-    epochs = 10
-    batch_size = 2
+    epochs = 15
+    batch_size = 12
 
     # Download pre-trained vgg model
     helper.maybe_download_pretrained_vgg(data_dir)
@@ -165,11 +176,11 @@ def run():
 
         saver = tf.train.Saver()
 
-        train_new = True
-        # train_new = False
+        # train_new = True
+        train_new = False
 
-        # fine_tune = True
-        fine_tune = False # Load the model and create the predictions
+        fine_tune = True
+        # fine_tune = False # Load the model and create the predictions
 
         if train_new:
             # Train the network
